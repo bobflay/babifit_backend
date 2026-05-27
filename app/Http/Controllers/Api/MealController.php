@@ -88,7 +88,7 @@ class MealController extends Controller
             'size' => $file->getSize(),
         ]);
 
-        $result = $recognizer->recognize(hash_file('md5', $file->getRealPath()) ?: $photo->id);
+        $result = $recognizer->recognize($photo, hash_file('md5', $file->getRealPath()) ?: null);
 
         return response()->json([
             'confidence' => $result['confidence'],
@@ -98,6 +98,25 @@ class MealController extends Controller
             'items' => $result['items'],
             // Extension: pass this back to POST /meals to attach the dish photo.
             'photoId' => $photo->id,
+        ]);
+    }
+
+    /** POST /meals/estimate — AI calorie/macro estimate for a typed meal. */
+    public function estimate(Request $request, FoodRecognitionService $recognizer): JsonResponse
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'portionGrams' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:5000'],
+        ]);
+
+        $result = $recognizer->estimateFromText($data['name'], $data['portionGrams'] ?? null);
+
+        return response()->json([
+            'confidence' => $result['confidence'],
+            'name' => $result['name'],
+            'kcal' => $result['kcal'],
+            'macros' => $result['macros'],
+            'items' => $result['items'] ?? [],
         ]);
     }
 

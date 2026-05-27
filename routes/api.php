@@ -44,6 +44,7 @@ Route::middleware(['auth:sanctum', 'ability:access'])->group(function () {
     Route::get('meals', [MealController::class, 'index']);
     Route::get('meals/summary', [MealController::class, 'summary']);
     Route::post('meals/recognize', [MealController::class, 'recognize']);
+    Route::post('meals/estimate', [MealController::class, 'estimate']);
     Route::post('meals', [MealController::class, 'store']);
     Route::patch('meals/{meal}', [MealController::class, 'update']);
     Route::delete('meals/{meal}', [MealController::class, 'destroy']);
