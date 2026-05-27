@@ -15,35 +15,50 @@ class ActivityController extends Controller
 {
     public function __construct(private readonly CalorieEstimator $estimator) {}
 
-    /** GET /activities?week=YYYY-Www */
+    /** GET /activities?week=YYYY-Www  OR  ?days=N (rolling N-day window) */
     public function index(Request $request): JsonResponse
     {
-        $request->validate(['week' => ['sometimes', 'regex:/^\d{4}-W\d{2}$/']]);
+        $request->validate([
+            'week' => ['sometimes', 'regex:/^\d{4}-W\d{2}$/'],
+            'days' => ['sometimes', 'integer', 'min:1', 'max:366'],
+        ]);
 
-        [$start, $end] = $this->weekBounds($request->query('week'));
         $user = $request->user();
 
-        $days = $user->activities()
+        // A `days` param takes precedence: a rolling N-day window ending today,
+        // compared against the immediately preceding N-day period. Otherwise
+        // fall back to the (ISO or rolling 7-day) week window.
+        if ($request->filled('days')) {
+            $days = (int) $request->integer('days');
+            $end = Carbon::today();
+            $start = $end->copy()->subDays($days - 1);
+            $prevEnd = $start->copy()->subDay();
+            $prevStart = $prevEnd->copy()->subDays($days - 1);
+        } else {
+            [$start, $end] = $this->weekBounds($request->query('week'));
+            $prevStart = $start->copy()->subWeek();
+            $prevEnd = $end->copy()->subWeek();
+        }
+
+        $activities = $user->activities()
             ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
             ->orderBy('date')
             ->get();
 
-        $weekKcal = (int) $days->sum('kcal');
-        $lastWeekKcal = (int) $user->activities()
-            ->whereBetween('date', [
-                $start->copy()->subWeek()->toDateString(),
-                $end->copy()->subWeek()->toDateString(),
-            ])->sum('kcal');
+        $kcal = (int) $activities->sum('kcal');
+        $prevKcal = (int) $user->activities()
+            ->whereBetween('date', [$prevStart->toDateString(), $prevEnd->toDateString()])
+            ->sum('kcal');
 
         return response()->json([
             'weekTotals' => [
-                'kcal' => $weekKcal,
-                'mins' => (int) $days->sum('mins'),
-                'sessions' => $days->count(),
-                'vsLastWeekPct' => $this->pctChange($weekKcal, $lastWeekKcal),
+                'kcal' => $kcal,
+                'mins' => (int) $activities->sum('mins'),
+                'sessions' => $activities->count(),
+                'vsLastWeekPct' => $this->pctChange($kcal, $prevKcal),
             ],
             'burnTarget' => (int) ($user->target?->burn ?? 0),
-            'days' => ActivityResource::collection($days)->resolve(),
+            'days' => ActivityResource::collection($activities)->resolve(),
         ]);
     }
 
