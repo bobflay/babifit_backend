@@ -53,6 +53,9 @@ class DatabaseSeeder extends Seeder
         $this->seedScans($user);
         $this->seedMeals($user);
         $this->seedActivities($user);
+
+        // Auguste Nehme + his six transcribed InBody scans (storage/app/auguste_data).
+        $this->call(AugusteSeeder::class);
     }
 
     private function seedScans(User $user): void
