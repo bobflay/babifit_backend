@@ -12,17 +12,21 @@ class TodayController extends Controller
 {
     public function __construct(private readonly TodayService $today) {}
 
-    /** GET /today?date=YYYY-MM-DD */
+    /** GET /today?date=YYYY-MM-DD&days=N */
     public function show(Request $request): JsonResponse
     {
-        $request->validate(['date' => ['sometimes', 'date_format:Y-m-d']]);
+        $request->validate([
+            'date' => ['sometimes', 'date_format:Y-m-d'],
+            'days' => ['sometimes', 'integer', 'min:1', 'max:366'],
+        ]);
 
         $date = $request->filled('date')
             ? Carbon::createFromFormat('Y-m-d', $request->query('date'))
             : Carbon::today();
 
         $user = $request->user()->load('target');
+        $windowDays = $request->filled('days') ? (int) $request->integer('days') : null;
 
-        return response()->json($this->today->build($user, $date));
+        return response()->json($this->today->build($user, $date, $windowDays));
     }
 }

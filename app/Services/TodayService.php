@@ -16,10 +16,10 @@ class TodayService
         private readonly ActivityRecommendationService $recommendations,
     ) {}
 
-    public function build(User $user, Carbon $date): array
+    public function build(User $user, Carbon $date, ?int $windowDays = null): array
     {
         $latest = $user->scans()->orderByDesc('date')->orderByDesc('created_at')->first();
-        $previous = $latest?->previous();
+        $previous = $this->baselineFor($user, $latest, $windowDays);
         $deltas = $latest?->deltas($previous);
 
         $eaten = (int) $user->meals()->whereDate('date', $date)->sum('kcal');
@@ -55,6 +55,35 @@ class TodayService
                 ], $recommendations['items']),
             ],
         ];
+    }
+
+    /**
+     * The scan to diff the latest against. With no window it's the immediately
+     * previous scan; with a window it's the earliest scan still inside it, so
+     * the dashboard deltas span the selected duration (falling back to the
+     * previous scan when only the latest is in range).
+     */
+    private function baselineFor(User $user, ?Scan $latest, ?int $windowDays): ?Scan
+    {
+        if (! $latest) {
+            return null;
+        }
+
+        if ($windowDays === null) {
+            return $latest->previous();
+        }
+
+        $start = Carbon::parse($latest->date)->subDays($windowDays)->toDateString();
+        $latestDate = Carbon::parse($latest->date)->toDateString();
+
+        $inWindow = $user->scans()
+            ->whereBetween('date', [$start, $latestDate])
+            ->where('id', '!=', $latest->id)
+            ->orderBy('date')
+            ->orderBy('created_at')
+            ->first();
+
+        return $inWindow ?? $latest->previous();
     }
 
     private function health(?Scan $latest, ?Scan $previous, ?array $deltas): ?array
