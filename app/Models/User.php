@@ -77,6 +77,11 @@ class User extends Authenticatable implements FilamentUser
         return $this->hasMany(Activity::class);
     }
 
+    public function gymLogs(): HasMany
+    {
+        return $this->hasMany(GymLog::class);
+    }
+
     /** Auto-derived initials when not set explicitly. */
     public function resolveInitials(): string
     {
