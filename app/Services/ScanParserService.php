@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Anthropic\Client;
 use App\Http\Resources\ScanResource;
+use App\Jobs\ParseScanJob;
 use App\Models\Photo;
 use App\Models\Scan;
 use App\Models\ScanParseJob;
@@ -36,16 +37,42 @@ class ScanParserService
     /** Image MIME types Claude vision accepts (PDFs go via the document block). */
     private const IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
+    /**
+     * Record the job as 'processing' and hand the (slow) extraction to the
+     * queue, so POST /scans/upload returns immediately and the app polls.
+     */
     public function createJob(User $user, ?Photo $photo): ScanParseJob
     {
-        [$draftScan, $confidence] = $this->extract($user, $photo);
+        $job = ScanParseJob::create([
+            'user_id' => $user->id,
+            'photo_id' => $photo?->id,
+            'status' => 'processing',
+        ]);
+
+        ParseScanJob::dispatch($job->id);
+
+        return $job;
+    }
+
+    /**
+     * Runs on the queue worker: perform the extraction and finalize the job.
+     * Extraction itself never throws (it falls back to a synthesized draft),
+     * so reaching 'done' is the normal terminal state.
+     */
+    public function fulfill(string $jobId): void
+    {
+        $job = ScanParseJob::with('photo')->find($jobId);
+        if (! $job || $job->status === 'done') {
+            return;
+        }
+
+        $user = $job->user;
+        [$draftScan, $confidence] = $this->extract($user, $job->photo);
 
         // Render the draft in the GET /scans/{id} shape (transient, unsaved).
         $draft = ScanResource::make($draftScan)->resolve();
 
-        return ScanParseJob::create([
-            'user_id' => $user->id,
-            'photo_id' => $photo?->id,
+        $job->update([
             'status' => 'done',
             'confidence' => $confidence,
             'draft' => $draft,
@@ -53,14 +80,10 @@ class ScanParserService
         ]);
     }
 
-    /** Extraction happens at create time; the poll just returns the job. */
+    /** The worker finalizes the job; the poll just reflects its current state. */
     public function settle(ScanParseJob $job): ScanParseJob
     {
-        if ($job->status === 'processing') {
-            $job->update(['status' => 'done']);
-        }
-
-        return $job;
+        return $job->fresh() ?? $job;
     }
 
     /**
@@ -108,7 +131,7 @@ class ScanParserService
             thinking: ['type' => 'adaptive'],
             system: 'You are a precise medical-document data extractor. You read InBody body-composition '
                 .'analysis sheets and transcribe their numeric values exactly. Never invent values: if a field '
-                .'is not present or not legible, return null for it. Units: weight/muscle/fat/protein in kg, '
+                .'is not present or not legible, omit it from the output. Units: weight/muscle/fat/protein in kg, '
                 .'percentages as plain numbers, water in litres, BMR in kcal. Set "confidence" to your overall '
                 .'transcription confidence between 0 and 1.',
             messages: [[
@@ -199,17 +222,16 @@ class ScanParserService
         ]);
     }
 
-    /** JSON schema forcing Claude's response shape (all nullable + required). */
+    /**
+     * JSON schema for Claude's structured output. Anthropic's grammar
+     * compiler limits unions, optionals, and overall complexity, so we
+     * extract only the flat headline scalars here. Nested segments and
+     * nutrition stay unset by extraction — they're filled from the
+     * previous scan or by the review step.
+     */
     private function schema(): array
     {
-        $num = ['type' => ['number', 'null']];
-        $seg = [
-            'type' => ['object', 'null'],
-            'additionalProperties' => false,
-            'properties' => ['muscle' => $num, 'fat' => $num],
-            'required' => ['muscle', 'fat'],
-        ];
-        $nutEnum = ['type' => ['string', 'null'], 'enum' => ['low', 'normal', 'high', null]];
+        $num = ['type' => 'number'];
 
         return [
             'type' => 'object',
@@ -221,25 +243,8 @@ class ScanParserService
                 'leanMass' => $num, 'intraWater' => $num, 'extraWater' => $num,
                 'abdominalFat' => $num, 'subcutFat' => $num, 'burnRec' => $num,
                 'confidence' => $num,
-                'segments' => [
-                    'type' => ['object', 'null'],
-                    'additionalProperties' => false,
-                    'properties' => ['armR' => $seg, 'armL' => $seg, 'torso' => $seg, 'legR' => $seg, 'legL' => $seg],
-                    'required' => ['armR', 'armL', 'torso', 'legR', 'legL'],
-                ],
-                'nutrition' => [
-                    'type' => ['object', 'null'],
-                    'additionalProperties' => false,
-                    'properties' => ['protein' => $nutEnum, 'fat' => $nutEnum, 'salt' => $nutEnum],
-                    'required' => ['protein', 'fat', 'salt'],
-                ],
             ],
-            'required' => [
-                'weight', 'muscle', 'fat', 'fatPct', 'bmi', 'health', 'bmr', 'water',
-                'visceral', 'waistHip', 'protein', 'salt', 'leanMass', 'intraWater',
-                'extraWater', 'abdominalFat', 'subcutFat', 'burnRec', 'confidence',
-                'segments', 'nutrition',
-            ],
+            'required' => ['weight', 'muscle', 'fat', 'fatPct', 'bmi', 'health', 'bmr', 'water', 'confidence'],
         ];
     }
 
