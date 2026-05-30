@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\ActivityController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\GymController;
 use App\Http\Controllers\Api\MealController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProgressController;
@@ -56,6 +57,12 @@ Route::middleware(['auth:sanctum', 'ability:access'])->group(function () {
     Route::get('activities/estimate', [ActivityController::class, 'estimate']);
     Route::post('activities', [ActivityController::class, 'store']);
     Route::delete('activities/{activity}', [ActivityController::class, 'destroy']);
+
+    // --- Gym (machine sets, photo + AI calorie estimate) ---
+    Route::get('gym', [GymController::class, 'index']);
+    Route::post('gym/recognize', [GymController::class, 'recognize']);
+    Route::post('gym', [GymController::class, 'store']);
+    Route::delete('gym/{gym}', [GymController::class, 'destroy']);
 
     // --- Progress ---
     Route::get('progress/series', [ProgressController::class, 'series']);
