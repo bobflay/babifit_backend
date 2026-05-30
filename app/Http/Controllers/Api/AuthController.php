@@ -14,6 +14,26 @@ class AuthController extends Controller
 {
     public function __construct(private readonly TokenService $tokens) {}
 
+    /** POST /auth/register — create an account and start a session. */
+    public function register(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+            'password' => ['required', 'string', 'min:8', 'max:255'],
+        ]);
+
+        $user = new User([
+            'name' => $data['name'],
+            'email' => $data['email'],
+            'password' => $data['password'], // hashed by the model 'password' cast
+        ]);
+        $user->initials = $user->resolveInitials();
+        $user->save();
+
+        return response()->json($this->tokens->issue($user), 201);
+    }
+
     /** POST /auth/login — exchange credentials for a session. */
     public function login(Request $request): JsonResponse
     {
