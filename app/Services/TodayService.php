@@ -23,7 +23,12 @@ class TodayService
         $deltas = $latest?->deltas($previous);
 
         $eaten = (int) $user->meals()->whereDate('date', $date)->sum('kcal');
-        $burned = (int) $user->activities()->whereDate('date', $date)->sum('kcal');
+        // Calories burned are consolidated across every source: cardio/activity
+        // sessions AND gym machine sets. Keeping them split lets the client show
+        // a breakdown while `burned` stays the single source of truth.
+        $activityKcal = (int) $user->activities()->whereDate('date', $date)->sum('kcal');
+        $gymKcal = (int) $user->gymLogs()->whereDate('date', $date)->sum('kcal');
+        $burned = $activityKcal + $gymKcal;
         $calorieTarget = (int) ($user->target?->calories ?? 0);
         $burnTarget = (int) ($user->target?->burn ?? 0);
 
@@ -41,6 +46,8 @@ class TodayService
                 'eaten' => $eaten,
                 'target' => $calorieTarget,
                 'burned' => $burned,
+                'activityKcal' => $activityKcal,
+                'gymKcal' => $gymKcal,
                 'burnTarget' => $burnTarget,
                 'toEatToday' => $calorieTarget - $eaten + $burned,
             ],

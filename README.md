@@ -4,7 +4,7 @@ Laravel 13 backend implementing the babifit API spec (`API_SPEC.md`). It powers
 the Flutter app's Today, Scans (InBody), Meals, Activities and Progress screens,
 replacing the app's seeded `lib/data.dart`.
 
-- **Base URL:** `http://127.0.0.1:8000/v1` (prod: `https://api.babifit.app/v1`)
+- **Base URL:** `https://babifit.xpertbot.online/v1` (local dev: `http://127.0.0.1:8000/v1`)
 - **Auth:** `Authorization: Bearer <accessToken>` on every route except `/v1/auth/*`
 - **Database:** MySQL (`babifit`)
 - **PHP:** 8.4 · **Laravel:** 13 · **Sanctum:** 4
@@ -42,11 +42,11 @@ The seeder reproduces every example payload in the spec ("today" = `2026-05-26`)
 
 ```bash
 # log in, then call a protected route
-TOKEN=$(curl -s -X POST http://127.0.0.1:8000/v1/auth/login \
+TOKEN=$(curl -s -X POST https://babifit.xpertbot.online/v1/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"email":"demo@babifit.app","password":"password"}' | jq -r .accessToken)
 
-curl -s http://127.0.0.1:8000/v1/today -H "Authorization: Bearer $TOKEN" | jq
+curl -s https://babifit.xpertbot.online/v1/today -H "Authorization: Bearer $TOKEN" | jq
 ```
 
 ## Admin panel

@@ -33,12 +33,26 @@ class MealController extends Controller
             'fat' => (int) $meals->sum('fat'),
         ];
 
+        // Consolidate calories burned (cardio activities + gym machine sets) so
+        // the meals view can show net intake, not just what was eaten.
+        $activityKcal = (int) $user->activities()->whereDate('date', $date)->sum('kcal');
+        $gymKcal = (int) $user->gymLogs()->whereDate('date', $date)->sum('kcal');
+        $burned = $activityKcal + $gymKcal;
+
         $target = (int) ($user->target?->calories ?? 0);
 
         return response()->json([
             'date' => $date->toDateString(),
             'totals' => $totals,
-            'remaining' => $target - $totals['kcal'],
+            'burned' => [
+                'total' => $burned,
+                'activity' => $activityKcal,
+                'gym' => $gymKcal,
+            ],
+            'net' => $totals['kcal'] - $burned,
+            // Remaining factors burned calories back into the day's budget so it
+            // matches the "to eat today" figure on the home dashboard.
+            'remaining' => $target - $totals['kcal'] + $burned,
             'meals' => MealResource::collection($meals)->resolve(),
         ]);
     }

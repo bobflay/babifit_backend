@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\ActivityController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CoachController;
 use App\Http\Controllers\Api\GymController;
 use App\Http\Controllers\Api\MealController;
 use App\Http\Controllers\Api\ProfileController;
@@ -33,6 +34,9 @@ Route::middleware(['auth:sanctum', 'ability:access'])->group(function () {
 
     // --- Today ---
     Route::get('today', [TodayController::class, 'show']);
+
+    // --- AI Coach ---
+    Route::post('coach/chat', [CoachController::class, 'chat']);
 
     // --- Scans (specific routes before {scan}) ---
     Route::get('scans', [ScanController::class, 'index']);

@@ -3,6 +3,16 @@
         Options -MultiViews -Indexes
     </IfModule>
 
+    # CORS for static files under /storage (served directly by Apache, bypassing
+    # Laravel's HandleCors middleware). Flutter Web needs these to load images.
+    <IfModule mod_headers.c>
+        <FilesMatch "\.(jpe?g|png|gif|webp|svg|bmp|ico|avif|mp4|webm|pdf)$">
+            Header set Access-Control-Allow-Origin "*"
+            Header set Access-Control-Allow-Methods "GET, HEAD, OPTIONS"
+            Header set Access-Control-Allow-Headers "*"
+        </FilesMatch>
+    </IfModule>
+
     RewriteEngine On
 
     # Handle Authorization Header
